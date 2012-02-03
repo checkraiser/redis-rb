@@ -1041,9 +1041,13 @@ class Redis
   def pipelined
     synchronize do
       begin
-        original, @client = @client, Pipeline.new
+        original = @client
+        @client = pipeline = Pipeline.new
+
         yield
-        original.call_pipeline(@client)
+
+        replies = original.call_pipeline(pipeline)
+        pipeline.process_replies(replies) if replies
       ensure
         @client = original
       end
@@ -1077,20 +1081,19 @@ class Redis
       if !block_given?
         @client.call [:multi]
       else
-        pipeline = nil
+        begin
+          original = @client
+          @client = pipeline = Pipeline.new
 
-        result = pipelined do
           multi
           yield(self)
           exec
-          pipeline = @client
-        end
 
-        if replies = result.last
-          pipeline.process_replies([nil] + replies)
+          replies = original.call_pipeline(pipeline)
+          pipeline.process_exec_replies(replies)
+        ensure
+          @client = original
         end
-
-        replies
       end
     end
   end

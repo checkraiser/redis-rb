@@ -25,10 +25,47 @@ test "MULTI/EXEC with a block" do |r|
   assert "s1" == r.get("foo")
 end
 
+test "Command transforming reply inside MULTI/EXEC block" do |r|
+  r.multi do |m|
+    @info = r.info
+  end
+
+  assert @info.value.kind_of?(Hash)
+end
+
 test "Assignment inside MULTI/EXEC block" do |r|
   r.multi do |m|
     @first = m.sadd("foo", 1)
     @second = m.sadd("foo", 1)
+  end
+
+  assert_equal true, @first.value
+  assert_equal false, @second.value
+end
+
+test "Assignment inside MULTI/EXEC block with delayed command errors" do |r|
+  assert_raise do
+    r.multi do |m|
+      @first = m.set("foo", "s1")
+      @second = m.incr("foo") # not an integer
+      @third = m.lpush("foo", "value") # wrong kind of value
+    end
+  end
+
+  assert_equal "OK", @first.value
+  assert_raise { @second.value }
+  assert_raise { @third.value }
+end
+
+test "Assignment inside MULTI/EXEC block with immediate command errors" do |r|
+  assert_raise do
+    r.multi do |m|
+      m.doesnt_exist
+      @first = m.sadd("foo", 1)
+      m.doesnt_exist
+      @second = m.sadd("foo", 1)
+      m.doesnt_exist
+    end
   end
 
   assert_equal true, @first.value

@@ -44,8 +44,8 @@ class Redis
       error = nil
 
       # The first error reply will be raised after futures have been set.
-      result = futures.each_with_index.map do |future, i|
-        obj = future._set(replies[i])
+      result = replies.each_with_index.map do |reply, i|
+        obj = futures[i]._set(reply)
         error = obj if error.nil? && obj.kind_of?(::Exception)
         obj
       end
@@ -53,6 +53,39 @@ class Redis
       raise error if error
 
       result
+    end
+
+    def process_exec_replies(replies)
+      error = nil
+
+      exec_replies = replies.last
+      exec_replies_index = 0
+
+      # The first error reply will be raised after futures have been set.
+      replies.each_with_index.map do |reply, i|
+        future = futures[i]
+        obj = nil
+
+        if reply == "QUEUED"
+          if exec_replies.nil? || exec_replies_index >= exec_replies.length
+            # Skip future. Calling #value results in FutureNotReady.
+            next
+          else
+            obj = future._set(exec_replies[exec_replies_index])
+            exec_replies[exec_replies_index] = obj
+            exec_replies_index += 1
+          end
+        else
+          obj = future._set(reply)
+        end
+
+        error = obj if error.nil? && obj.kind_of?(::Exception)
+        obj
+      end
+
+      raise error if error
+
+      exec_replies
     end
   end
 
