@@ -41,9 +41,18 @@ class Redis
     end
 
     def process_replies(replies)
-      futures.each_with_index.map do |future, i|
-        future._set(replies[i])
+      error = nil
+
+      # The first error reply will be raised after futures have been set.
+      result = futures.each_with_index.map do |future, i|
+        obj = future._set(replies[i])
+        error = obj if error.nil? && obj.kind_of?(::Exception)
+        obj
       end
+
+      raise error if error
+
+      result
     end
   end
 
@@ -68,7 +77,6 @@ class Redis
 
     def _set(object)
       @object = @transformation ? @transformation.call(object) : object
-      value
     end
 
     def _command
